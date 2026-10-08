@@ -19,9 +19,8 @@ async function loadStatus() {
   $('save-shared-key').classList.toggle('hidden',data.role!=='admin');
   $('admin-section').classList.toggle('hidden',data.role!=='admin');
   const approved=data.approved_examples||0;
-  $('training-count').textContent=`${approved} approved example${approved===1?'':'s'}`;
+  $('training-count').textContent=`${approved} verified example${approved===1?'':'s'}`;
   if(data.role==='admin') {
-    loadTrainingQueue().catch(error=>showMessage(error.message,true));
     loadSalesMembers().catch(error=>{$('sales-members').textContent=`Could not load sales members: ${error.message}`;});
   }
   return data;
@@ -31,7 +30,9 @@ function setFinalized(value) {
   state.finalized=value;
   $('download-excel').disabled=!value;
   $('download-pdf').disabled=!value;
-  $('final-button').textContent=value?'✓ Final saved — update if edited':'✓ Final — save verified list';
+  $('final-button').textContent=state.origin==='manual_import'
+    ?(value?'✓ Example saved — update if edited':'✓ Save verified example')
+    :(value?'✓ Final saved — update if edited':'✓ Final — save verified list');
 }
 
 function setFiles(files) {
@@ -97,7 +98,11 @@ function renderWarnings() {
 function showReview(data) {
   state.data=data;
   state.editCount=0;
-  $('keep-for-training').checked=state.origin==='manual_import'||Math.random()<.1;
+  const isExample=state.origin==='manual_import';
+  $('review-title').textContent=isExample?'Check the verified example':'Check the packing list';
+  $('review-purpose').textContent=isExample
+    ?'Compare every imported Excel row with the handwritten photos. Save only when the report is correct.'
+    :'Correct every item against the photo. Final saves the verified result for the team.';
   setFinalized(false);
   $('customer').value=data.customer||'';
   $('packing-date').value=data.packing_date||new Date().toLocaleDateString('en-GB');
@@ -130,6 +135,7 @@ async function processFiles() {
 
 async function importTraining() {
   clearMessage();
+  if(state.role!=='admin'){showMessage('Only an admin can add verified examples.',true);return;}
   const sheet=$('training-sheet').files[0], photos=Array.from($('training-photos').files);
   if(!sheet||!photos.length){showMessage('Choose a finished Excel and its matching photos.',true);return;}
   $('import-training').disabled=true;
@@ -137,7 +143,7 @@ async function importTraining() {
     const data=await parseFinishedWorkbook(sheet);
     state.uploads=await uploadPages(await preparePages(photos));state.origin='manual_import';state.listId=null;
     showReview(data);
-    showMessage(`Imported ${data.boxes.length} filled boxes. Compare with photos, then press Final. Admin will review it for shared training hints.`);
+    showMessage(`Imported ${data.boxes.length} filled boxes. Compare every row with the photos, then save the verified example.`);
   }catch(error){showMessage(error.message,true);}finally{$('import-training').disabled=false;}
 }
 
@@ -147,11 +153,13 @@ async function finalizeList() {
   const button=$('final-button');button.disabled=true;
   try{
     const data=collectData();validateList(data);
-    const info=await api('finalize',{id:state.listId,paths:state.listId?[]:state.uploads.map(x=>x.path),hashes:state.uploads.map(x=>x.hash),data,origin:state.origin,keep_for_training:$('keep-for-training').checked});
+    const info=await api('finalize',{id:state.listId,paths:state.listId?[]:state.uploads.map(x=>x.path),hashes:state.uploads.map(x=>x.hash),data,origin:state.origin});
     state.listId=info.id;
     setFinalized(true);
     loadHistory().catch(()=>{});
-    showMessage(info.training_status==='training_candidate'?'Final saved. Source photos are queued for admin review. Excel and PDF are ready.':'Final saved. Excel and PDF are ready; source photos were deleted from cloud storage.');
+    showMessage(info.status==='training_approved'
+      ?'Verified example saved. Its product codes will help future recognition. Excel and PDF are ready.'
+      :'Final saved. Excel and PDF are ready; source photos were deleted from cloud storage.');
     loadStatus().catch(()=>{});
   }catch(error){showMessage(error.message,true);}finally{button.disabled=false;}
 }
@@ -190,7 +198,7 @@ $('save-shared-key').addEventListener('click',()=>saveKey('shared'));
 $('key-mode').addEventListener('change',async e=>{try{await api('set-key-mode',{mode:e.target.value});await loadStatus();}catch(error){$('settings-error').textContent=error.message;}});
 $('page-tabs').addEventListener('click',e=>{const button=e.target.closest('[data-page]');if(button)setPage(Number(button.dataset.page));});
 $('source-view').addEventListener('click',()=>{$('source-view').classList.toggle('zoomed');});
-function markEdited(){setFinalized(false);state.editCount++;if(state.editCount>=2)$('keep-for-training').checked=true;}
+function markEdited(){setFinalized(false);state.editCount++;}
 document.querySelectorAll('#customer,#packing-date,#private-mark,#transport').forEach(input=>input.addEventListener('input',markEdited));
 $('boxes').addEventListener('input',e=>{const target=e.target;markEdited();if(target.dataset.boxNumber!==undefined){state.data.boxes[Number(target.dataset.boxNumber)].number=Number(target.value);updateSummary();return;}if(target.dataset.field!==undefined){const bi=Number(target.dataset.box),ri=Number(target.dataset.row);const box=state.data.boxes[bi];while(box.items.length<=ri)box.items.push({code:'',size:'',quantity:null,note:'',source_page:null,source_text:'',needs_review:false});box.items[ri][target.dataset.field]=target.dataset.field==='quantity'?(target.value===''?null:Number(target.value)):target.value;updateSummary();}});
 $('boxes').addEventListener('click',e=>{const page=e.target.closest('[data-page]');if(page){setPage(Number(page.dataset.page));return;}const row=e.target.closest('[data-row-action]');if(row){markEdited();const box=state.data.boxes[Number(row.dataset.box)];box.items.splice(Number(row.dataset.row),1);renderBoxes();return;}const button=e.target.closest('[data-box-action]');if(!button)return;markEdited();const bi=Number(button.dataset.box);if(button.dataset.boxAction==='remove'){state.data.boxes.splice(bi,1);}else if(button.dataset.boxAction==='checked'){state.data.boxes[bi].needs_review=false;state.data.boxes[bi].items.forEach(item=>item.needs_review=false);}else{state.data.boxes[bi].items.push({code:'',size:'',quantity:null,note:'',source_page:null,source_text:'',needs_review:false});}renderBoxes();});
@@ -204,16 +212,11 @@ async function saveKey(scope){
   try{await api('set-key',{scope,key});$('api-key').value='';await loadStatus();$('settings-dialog').close();showMessage(`${scope==='shared'?'Company shared':'Personal'} Gemini key updated.`);}
   catch(error){$('settings-error').textContent=error.message;}
 }
-async function loadTrainingQueue(){
-  const {candidates}=await api('training-queue');
-  $('training-queue').innerHTML=candidates.length?candidates.map(c=>`<div class="queue-card" data-case="${c.id}"><h4>${escapeHtml(c.data.customer||'Untitled list')}</h4><p>${c.data.boxes.length} boxes · ${escapeHtml(c.origin)} · ${new Date(c.created_at).toLocaleString()}</p><p>${c.source_paths.length} source page(s) retained for review</p><details><summary>View verified rows</summary>${c.data.boxes.map(box=>`<div class="queue-box"><strong>Box ${escapeHtml(box.number)}</strong><ul>${box.items.map(item=>`<li>${escapeHtml(item.code)} ${escapeHtml(item.size)} — ${escapeHtml(item.quantity)} ${escapeHtml(item.note||'')}</li>`).join('')}</ul></div>`).join('')}</details><div class="queue-actions"><button class="secondary-button" data-review="open">Open photos</button><button class="primary-button" data-review="approve">Approve example</button><button class="link-button danger" data-review="reject">Reject & delete photos</button></div></div>`).join(''):'No cases waiting for review.';
-  state.candidates=candidates;
-}
 async function loadHistory(){
   const {data,error}=await supabase.from('packing_lists').select('id,data,status,source_paths,source_hashes,origin,created_at').order('created_at',{ascending:false}).limit(40);
   if(error)throw error;
   state.history=data||[];
-  $('list-history').innerHTML=state.history.length?state.history.map(list=>`<button class="history-row" type="button" data-list="${list.id}"><strong>${escapeHtml(list.data.customer||'Untitled')}</strong><span>${escapeHtml(list.data.boxes.length)} boxes · ${escapeHtml(new Date(list.created_at).toLocaleDateString())} · ${escapeHtml(list.status.replaceAll('_',' '))}</span><span>Open →</span></button>`).join(''):'No saved lists yet.';
+  $('list-history').innerHTML=state.history.length?state.history.map(list=>`<button class="history-row" type="button" data-list="${list.id}"><strong>${escapeHtml(list.data.customer||'Untitled')}</strong><span>${escapeHtml(list.data.boxes.length)} boxes · ${escapeHtml(new Date(list.created_at).toLocaleDateString())} · ${list.origin==='manual_import'&&list.status==='training_approved'?'verified example':'saved list'}</span><span>Open →</span></button>`).join(''):'No saved lists yet.';
 }
 $('refresh-history').addEventListener('click',()=>loadHistory().catch(error=>showMessage(error.message,true)));
 $('list-history').addEventListener('click',async e=>{
@@ -228,24 +231,9 @@ $('list-history').addEventListener('click',async e=>{
       state.uploads.push({path,hash:list.source_hashes[index]||'',url:data.signedUrl});
     }
     showReview(structuredClone(list.data));
-    $('keep-for-training').checked=list.source_paths.length>0;
     setFinalized(true);
   }catch(error){showMessage(error.message,true);}
 });
-$('training-queue').addEventListener('click',async e=>{
-  const button=e.target.closest('[data-review]'), card=e.target.closest('[data-case]');if(!button||!card)return;
-  const candidate=state.candidates?.find(c=>c.id===card.dataset.case);if(!candidate)return;
-  try{
-    if(button.dataset.review==='open'){
-      for(const path of candidate.source_paths){const {data,error}=await supabase.storage.from('packing-sources').createSignedUrl(path,300);if(error)throw error;window.open(data.signedUrl,'_blank');}
-    }else{
-      const approve=button.dataset.review==='approve';
-      if(!approve&&!confirm('Reject this training example and delete its source photos?'))return;
-      await api('review-training',{id:candidate.id,approve});await loadTrainingQueue();await loadStatus();
-    }
-  }catch(error){showMessage(error.message,true);}
-});
-$('refresh-training').addEventListener('click',()=>loadTrainingQueue().catch(error=>showMessage(error.message,true)));
 $('dismiss-credential').addEventListener('click',()=>{
   $('sales-credential-password').value='';$('sales-credential').classList.add('hidden');
 });

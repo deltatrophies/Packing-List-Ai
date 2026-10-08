@@ -233,5 +233,5 @@ export async function parseFinishedWorkbook(file) {
   if (!found.size) throw new Error('No filled boxes found');
   const stem = file.name.replace(/\.xlsx$/i, '');
   const date = stem.match(/\b\d{2}[- ]\d{2}[- ]\d{4}\b/)?.[0]?.replace(/ /g, '-') || '';
-  return { customer: stem.split(/\b\d{2}[- ]\d{2}[- ]\d{4}\b/)[0].replace(/[ _-]+$/, ''), packing_date: date, private_mark: privateMark, transport: '', boxes: [...found.values()].sort((a, b) => a.number - b.number), warnings: ['Imported from Excel. Compare with source photos before pressing Final.'] };
+  return { customer: stem.split(/\b\d{2}[- ]\d{2}[- ]\d{4}\b/)[0].replace(/[ _-]+$/, ''), packing_date: date, private_mark: privateMark, transport: '', boxes: [...found.values()].sort((a, b) => a.number - b.number), warnings: ['Imported from Excel. Compare with source photos before saving the verified example.'] };
 }

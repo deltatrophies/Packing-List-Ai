@@ -106,7 +106,7 @@ async function purgeExpiredUploads() {
   if (!error) await admin.from('temp_uploads').delete().in('path', paths);
 }
 async function guidance() {
-  const { data } = await admin.from('packing_lists').select('data').eq('status', 'training_approved').order('approved_at', { ascending: false }).limit(200);
+  const { data } = await admin.from('packing_lists').select('data').eq('status', 'training_approved').eq('origin', 'manual_import').order('approved_at', { ascending: false }).limit(200);
   const codes = new Map<string, number>();
   const labels = new Map<string, number>();
   for (const record of data || []) for (const box of (record.data?.boxes || [])) for (const item of (box.items || [])) {
@@ -177,33 +177,37 @@ async function finalize(actor: Actor, body: Record<string, unknown>) {
   const paths = Array.isArray(body.paths) ? body.paths.map(String) : [];
   if (paths.length > 50 || paths.some(path => !path.startsWith(`${actor.id}/`) || path.includes('..'))) return fail('Invalid source photos', 403);
   const existingId = body.id ? String(body.id) : null;
-  let existing: { id: string; source_paths: string[]; status: string } | null = null;
+  let existing: { id: string; source_paths: string[]; origin: string } | null = null;
   if (existingId) {
-    const found = await admin.from('packing_lists').select('id,source_paths,status').eq('id', existingId).eq('owner_id', actor.id).maybeSingle();
+    const found = await admin.from('packing_lists').select('id,source_paths,origin').eq('id', existingId).eq('owner_id', actor.id).maybeSingle();
     existing = found.data;
     if (!existing) return fail('Final list not found', 404);
   } else if (paths.length === 0) return fail('Source photos are required', 400);
+  const isExample = existing ? existing.origin === 'manual_import' : body.origin === 'manual_import';
+  if (isExample && actor.role !== 'admin') return fail('Only an admin can save verified examples', 403);
+  if (existing && String(body.origin) !== existing.origin) return fail('List type cannot be changed', 400);
   if (paths.length) {
     const { data: uploads, error } = await admin.from('temp_uploads').select('path').eq('owner_id', actor.id).in('path', paths);
     if (error || uploads?.length !== paths.length) return fail('One or more source photos are unavailable', 400);
   }
-  const keep = (Boolean(body.keep_for_training) && paths.length > 0) || (existing?.source_paths?.length || 0) > 0;
-  const storedPaths = keep ? (paths.length ? paths : existing?.source_paths || []) : [];
+  const storedPaths = isExample ? (paths.length ? paths : existing?.source_paths || []) : [];
   const record = {
     owner_id: actor.id, data, source_paths: storedPaths,
     source_hashes: Array.isArray(body.hashes) ? body.hashes.map(String).slice(0, 50) : [],
-    origin: body.origin === 'manual_import' ? 'manual_import' : 'recognition',
-    status: keep ? 'training_candidate' : 'final', updated_at: new Date().toISOString(),
+    origin: isExample ? 'manual_import' : 'recognition',
+    status: isExample ? 'training_approved' : 'final', updated_at: new Date().toISOString(),
+    approved_by: isExample ? actor.id : null, approved_at: isExample ? new Date().toISOString() : null,
   };
   const query = existing ? admin.from('packing_lists').update(record).eq('id', existing.id).select('id').single()
                          : admin.from('packing_lists').insert(record).select('id').single();
   const { data: saved, error } = await query;
   if (error || !saved) return fail(error?.message || 'Could not save final list', 500);
-  if (!keep && paths.length) {
-    const { error: removeError } = await admin.storage.from(BUCKET).remove(paths);
-    if (!removeError) await admin.from('temp_uploads').delete().in('path', paths).eq('owner_id', actor.id);
+  const cleanupPaths = isExample ? [] : [...new Set([...paths, ...(existing?.source_paths || [])])];
+  if (cleanupPaths.length) {
+    const { error: removeError } = await admin.storage.from(BUCKET).remove(cleanupPaths);
+    if (!removeError && paths.length) await admin.from('temp_uploads').delete().in('path', paths).eq('owner_id', actor.id);
   } else if (paths.length) await admin.from('temp_uploads').delete().in('path', paths).eq('owner_id', actor.id);
-  return reply({ id: saved.id, training_status: record.status });
+  return reply({ id: saved.id, status: record.status });
 }
 
 Deno.serve(async request => {
@@ -215,7 +219,7 @@ Deno.serve(async request => {
     const action = String(body.action || '');
     if (action === 'status') {
       await purgeExpiredUploads();
-      const { count } = await admin.from('packing_lists').select('id', { count: 'exact', head: true }).eq('status', 'training_approved');
+      const { count } = await admin.from('packing_lists').select('id', { count: 'exact', head: true }).eq('status', 'training_approved').eq('origin', 'manual_import');
       return reply({
         role: actor.role, key_mode: actor.key_mode, approved_examples: count || 0,
         has_shared_key: await hasCredential('shared'), has_personal_key: await hasCredential(actor.id),
@@ -240,27 +244,6 @@ Deno.serve(async request => {
     }
     if (action === 'recognize') return recognize(actor, body);
     if (action === 'finalize') return finalize(actor, body);
-    if (action === 'training-queue') {
-      if (actor.role !== 'admin') return fail('Admin access required', 403);
-      const { data, error } = await admin.from('packing_lists').select('id,owner_id,data,source_paths,origin,created_at').eq('status', 'training_candidate').order('created_at', { ascending: false }).limit(100);
-      if (error) return fail(error.message, 500);
-      return reply({ candidates: data });
-    }
-    if (action === 'review-training') {
-      if (actor.role !== 'admin') return fail('Admin access required', 403);
-      const id = String(body.id || '');
-      const approve = Boolean(body.approve);
-      const { data: example } = await admin.from('packing_lists').select('id,source_paths').eq('id', id).eq('status', 'training_candidate').maybeSingle();
-      if (!example) return fail('Training candidate not found', 404);
-      const { error } = await admin.from('packing_lists').update({ status: approve ? 'training_approved' : 'training_rejected', approved_by: actor.id, approved_at: new Date().toISOString() }).eq('id', id);
-      if (error) return fail(error.message, 500);
-      if (!approve && example.source_paths.length) {
-        const { error: removeError } = await admin.storage.from(BUCKET).remove(example.source_paths);
-        if (removeError) return fail('Could not delete source photos; review was saved but cleanup is needed', 500);
-      }
-      if (!approve) await admin.from('packing_lists').update({ source_paths: [] }).eq('id', id);
-      return reply({ reviewed: true, approved: approve });
-    }
     if (action === 'invite') {
       if (actor.role !== 'admin') return fail('Admin access required', 403);
       const email = String(body.email || '').trim().toLowerCase();
