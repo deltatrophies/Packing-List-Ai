@@ -27,7 +27,7 @@ Supabase's built-in email sender has a very low quota, so email invites and magi
 
 ## Initial reference data
 
-The live app has four approved examples: the first Vinayak page verified against its Excel, the Sharda Sports Borsad 5-box workbook with two photos, and the two Vinayak workbooks covering boxes 1–20 and 21–34 with their matching photos. All were imported and approved on 8 October 2026.
+The initial admin examples are the Sharda Sports Borsad 5-box workbook with two photos and the two Vinayak workbooks covering boxes 1–20 and 21–34 with their matching photos. Only human-Excel imports count as verified examples; an older AI-reviewed list is excluded from recognition hints.
 
 ## Technical setup
 
