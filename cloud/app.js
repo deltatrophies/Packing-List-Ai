@@ -243,11 +243,46 @@ $('training-queue').addEventListener('click',async e=>{
   }catch(error){showMessage(error.message,true);}
 });
 $('refresh-training').addEventListener('click',()=>loadTrainingQueue().catch(error=>showMessage(error.message,true)));
-$('invite-button').addEventListener('click',async()=>{
-  const email=$('invite-email').value.trim();
-  try{await api('invite',{email});$('invite-email').value='';showMessage(`Invite sent to ${email}.`);}
-  catch(error){showMessage(error.message,true);}
+$('dismiss-credential').addEventListener('click',()=>{
+  $('sales-credential-password').value='';$('sales-credential').classList.add('hidden');
 });
+async function manageSalesLogin(action){
+  const email=$('invite-email').value.trim().toLowerCase();
+  if(!email){showMessage('Enter the sales teammate email first.',true);return;}
+  if(action==='reset-sales-password'&&!confirm(`Reset the password for ${email}? Their old password will stop working.`))return;
+  const button=$(action==='create-sales-login'?'create-sales-button':'reset-sales-button');button.disabled=true;
+  try{
+    const result=await api(action,{email});
+    $('sales-credential-title').textContent=action==='create-sales-login'?'Sales login created':'Sales password reset';
+    $('sales-credential-email').value=result.email;
+    $('sales-credential-password').value=result.password;
+    $('sales-credential').classList.remove('hidden');
+    $('sales-credential').scrollIntoView({behavior:'smooth',block:'nearest'});
+    $('invite-email').value='';
+  }catch(error){showMessage(error.message,true);}finally{button.disabled=false;}
+}
+$('create-sales-button').addEventListener('click',()=>manageSalesLogin('create-sales-login'));
+$('reset-sales-button').addEventListener('click',()=>manageSalesLogin('reset-sales-password'));
+$('change-password-button').addEventListener('click',async()=>{
+  const first=$('new-password').value,second=$('confirm-password').value;
+  const message=$('password-message');message.textContent='';
+  if(first.length<12||first!==second){message.textContent='Enter matching passwords with at least 12 characters.';return;}
+  const button=$('change-password-button');button.disabled=true;
+  try{
+    const {error}=await supabase.auth.updateUser({password:first});if(error)throw error;
+    $('new-password').value='';$('confirm-password').value='';
+    message.textContent='Password saved. You can use it next time instead of an email link.';
+  }catch(error){message.textContent=error.message;}finally{button.disabled=false;}
+});
+$('password-login-button').addEventListener('click',async()=>{
+  const email=$('login-email').value.trim(),password=$('login-password').value;
+  const message=$('login-message');message.textContent='';
+  if(!email||!password){message.textContent='Enter your email and password.';return;}
+  const button=$('password-login-button');button.disabled=true;
+  try{const {error}=await supabase.auth.signInWithPassword({email,password});if(error)throw error;$('login-password').value='';await boot();}
+  catch(error){message.textContent=error.message;}finally{button.disabled=false;}
+});
+$('login-password').addEventListener('keydown',event=>{if(event.key==='Enter')$('password-login-button').click();});
 $('login-button').addEventListener('click',async()=>{
   if(!supabase){$('login-message').textContent='Supabase project is not configured yet.';return;}
   const email=$('login-email').value.trim();

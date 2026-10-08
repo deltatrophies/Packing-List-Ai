@@ -269,6 +269,25 @@ Deno.serve(async request => {
       if (error) return fail(error.message, 400);
       return reply({ invited: true });
     }
+    if (action === 'create-sales-login' || action === 'reset-sales-password') {
+      if (actor.role !== 'admin') return fail('Admin access required', 403);
+      const email = String(body.email || '').trim().toLowerCase();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return fail('Enter a valid sales email');
+      const random = new Uint8Array(24);
+      crypto.getRandomValues(random);
+      const password = btoa(String.fromCharCode(...random)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+      if (action === 'create-sales-login') {
+        const { data: created, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+        if (error || !created.user) return fail(error?.message || 'Could not create sales login', 400);
+      } else {
+        const { data: profile, error: profileError } = await admin.from('profiles').select('id,role').eq('email', email).maybeSingle();
+        if (profileError || !profile) return fail('Sales account not found', 404);
+        if (profile.role !== 'sales') return fail('Only sales passwords can be reset here', 403);
+        const { error } = await admin.auth.admin.updateUserById(profile.id, { password });
+        if (error) return fail(error.message, 400);
+      }
+      return reply({ email, password });
+    }
     return fail('Unknown action', 404);
   } catch (error) { return fail(String(error instanceof Error ? error.message : error), 400); }
 });

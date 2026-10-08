@@ -2,13 +2,13 @@
 
 **Live app:** https://delta-packing-list-ai.onrender.com
 
-**Admin login:** `deltatrophies88@gmail.com` (email sign-in link)
+**Admin login:** `deltatrophies88@gmail.com` (set a password in Settings while signed in; email links remain available when the mail quota allows)
 
 The sales team can open the live link on any PC. The frontend is hosted on Render. Supabase provides sign-in, private source-photo storage, saved lists, the review queue, and an Edge Function that calls Gemini. Gemini keys stay server-side; the browser never receives them.
 
 ## Use it
 
-1. Ask the admin for an invite, then open the email sign-in link.
+1. Ask the admin to create a sales login. Enter the email and temporary password they give you. Change the password in **Settings** after your first sign-in.
 2. Upload JPG, PNG, WebP, or scanned PDF pages in order. Use the arrows to fix page order.
 3. Click **Read handwritten sheets**. Compare every box with the source photo. Edit quantities, item codes, sizes, notes, and box numbers where needed. **Preview PDF** is available before saving.
 4. Click **Final** after checking. Then download Excel or PDF. Reopen a saved list to correct it; click **Final** again after edits.
@@ -17,11 +17,13 @@ The print layout gives each box at least five item rows, with blank rows when ne
 
 ## Admin work
 
-- Use **Admin → Send invite** to add sales users by email. New users receive the `sales` role.
-- Use **API settings** to replace the company shared Gemini key. A sales user can add a personal key and switch their own key mode there. The shared key is the default.
+- Use **Admin → Create sales login** to make an account. The app shows a one-time temporary password to the admin; give it to that person privately. This does not send email. **Reset sales password** replaces a lost password and invalidates the old one.
+- Use **Settings** to set your own sign-in password, replace the company shared Gemini key, or switch to a personal key. The shared Gemini key is the default.
 - **Add a finished example** accepts matching handwritten photos plus a verified `.xlsx`. Inspect the imported rows, click **Final**, then use **Admin → Approve example**. New finalized lists can also be marked for admin review.
 - Approved examples immediately supply company item-code and size spelling hints to future OCR requests. This improves vocabulary recognition; it does **not** train or fine-tune Gemini model weights. The uploaded photos remain available for admin audit. Unselected source photos are deleted when Final succeeds. Abandoned temporary uploads are cleaned up when the app checks status after 48 hours.
 - The user should still verify every output against its photos. Handwriting and crossed-out corrections can remain ambiguous.
+
+Supabase's built-in email sender has a very low quota, so email invites and magic links can fail with a rate-limit message. Password logins do not send email. For reliable email invitations later, configure a custom SMTP provider in Supabase Auth; do not raise the built-in limit or depend on it for daily sales logins.
 
 ## Initial reference data
 

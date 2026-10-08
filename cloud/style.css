@@ -24,3 +24,10 @@
 .queue-card details{margin:12px 0;padding:10px 12px;background:#f8faff;border-radius:8px}.queue-card summary{cursor:pointer;font-weight:bold;color:var(--blue)}
 .queue-box{padding:8px 0;border-bottom:1px solid var(--line)}.queue-box:last-child{border:0}.queue-box ul{margin:4px 0 0;padding-left:20px}
 @media(max-width:700px){.history-row{display:grid;gap:3px}.history-row strong{min-width:0}.history-panel,#admin-section{padding:18px}}
+.email-login{border-top:1px solid var(--line);padding-top:13px;color:var(--muted)}
+.email-login summary{cursor:pointer;color:var(--blue);font-weight:bold}.email-login p{margin:10px 0}
+.credential-result{border:1px solid #b7d4bd;background:#f1faf2;border-radius:10px;padding:16px;margin:0 0 26px;max-width:670px}
+.credential-result p{color:var(--muted);margin:8px 0 14px}.credential-result label{display:grid;gap:5px;margin:10px 0;font-weight:bold;font-size:12px}
+.credential-result input{width:100%;padding:10px;border:1px solid var(--line);border-radius:7px;background:white;font:inherit}
+.settings-dialog h3{font-size:15px;margin:14px 0 4px}.settings-dialog hr{border:0;border-top:1px solid var(--line);margin:21px 0}
+.admin-invite{flex-wrap:wrap}.admin-invite input{min-width:220px}
