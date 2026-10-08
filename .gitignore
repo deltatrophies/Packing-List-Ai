@@ -3,4 +3,10 @@ __pycache__/
 .pytest_cache/
 .local/
 *.pyc
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+supabase/.temp/
 
