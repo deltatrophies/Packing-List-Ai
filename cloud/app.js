@@ -18,7 +18,8 @@ async function loadStatus() {
   $('settings-key-state').textContent=`Shared: ${data.has_shared_key?'configured':'missing'} · Personal: ${data.has_personal_key?'configured':'missing'}`;
   $('save-shared-key').classList.toggle('hidden',data.role!=='admin');
   $('admin-section').classList.toggle('hidden',data.role!=='admin');
-  $('training-count').textContent=`${data.approved_examples||0} approved examples`;
+  const approved=data.approved_examples||0;
+  $('training-count').textContent=`${approved} approved example${approved===1?'':'s'}`;
   if(data.role==='admin') loadTrainingQueue().catch(error=>showMessage(error.message,true));
   return data;
 }
