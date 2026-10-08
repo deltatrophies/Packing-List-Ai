@@ -31,3 +31,7 @@
 .credential-result input{width:100%;padding:10px;border:1px solid var(--line);border-radius:7px;background:white;font:inherit}
 .settings-dialog h3{font-size:15px;margin:14px 0 4px}.settings-dialog hr{border:0;border-top:1px solid var(--line);margin:21px 0}
 .admin-invite{flex-wrap:wrap}.admin-invite input{min-width:220px}
+.sales-head{margin:20px 0 12px}.sales-head h3{margin:0 0 4px;font-size:17px}.sales-head .secondary-button{flex:none}
+.sales-members{display:grid;gap:8px;margin-bottom:28px}.sales-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 14px;border:1px solid var(--line);border-radius:9px;background:#fff}
+.sales-details{display:grid;gap:3px;min-width:0}.sales-details strong{overflow-wrap:anywhere}.sales-details span{color:var(--muted);font-size:12px}
+@media(max-width:700px){.sales-head .secondary-button{margin-top:10px}.sales-row{align-items:flex-start;flex-direction:column}}

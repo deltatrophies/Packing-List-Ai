@@ -269,6 +269,12 @@ Deno.serve(async request => {
       if (error) return fail(error.message, 400);
       return reply({ invited: true });
     }
+    if (action === 'list-sales-members') {
+      if (actor.role !== 'admin') return fail('Admin access required', 403);
+      const { data, error } = await admin.from('profiles').select('id,email,created_at').eq('role', 'sales').order('created_at', { ascending: false }).limit(500);
+      if (error) return fail('Could not load sales members', 500);
+      return reply({ members: data || [] });
+    }
     if (action === 'create-sales-login' || action === 'reset-sales-password') {
       if (actor.role !== 'admin') return fail('Admin access required', 403);
       const email = String(body.email || '').trim().toLowerCase();

@@ -17,7 +17,7 @@ The print layout gives each box at least five item rows, with blank rows when ne
 
 ## Admin work
 
-- Use **Admin → Create sales login** to make an account. The app shows a one-time temporary password to the admin; give it to that person privately. This does not send email. **Reset sales password** replaces a lost password and invalidates the old one.
+- Use **Admin → Create sales login** to make an account. The app shows a one-time temporary password to the admin; give it to that person privately. This does not send email. The **Sales team** list shows created members and their emails. Passwords cannot be viewed after creation; use **Reset password** beside a member to generate a new temporary password and invalidate the old one.
 - Use **Settings** to set your own sign-in password, replace the company shared Gemini key, or switch to a personal key. The shared Gemini key is the default.
 - **Add a finished example** accepts matching handwritten photos plus a verified `.xlsx`. Inspect the imported rows, click **Final**, then use **Admin → Approve example**. New finalized lists can also be marked for admin review.
 - Approved examples immediately supply company item-code and size spelling hints to future OCR requests. This improves vocabulary recognition; it does **not** train or fine-tune Gemini model weights. The uploaded photos remain available for admin audit. Unselected source photos are deleted when Final succeeds. Abandoned temporary uploads are cleaned up when the app checks status after 48 hours.

@@ -2,7 +2,7 @@ import { api, configured, preparePages, uploadPages, combinePages, supabase } fr
 import { makeExcel, makePdf, parseFinishedWorkbook, validateList } from './exports.js';
 
 const $ = (id) => document.getElementById(id);
-const state = { files: [], imageUrls: [], uploads: [], data: null, currentPage: 0, listId: null, finalized: false, origin: 'recognition', editCount: 0, role: 'sales' };
+const state = { files: [], imageUrls: [], uploads: [], data: null, currentPage: 0, listId: null, finalized: false, origin: 'recognition', editCount: 0, role: 'sales', salesMembers: [] };
 
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function showMessage(message, error=false) { const el=$('review-section').classList.contains('hidden')?$('global-message'):$('message'); el.textContent=message; el.classList.remove('hidden'); el.classList.toggle('error',error); el.scrollIntoView({behavior:'smooth',block:'nearest'}); }
@@ -20,7 +20,10 @@ async function loadStatus() {
   $('admin-section').classList.toggle('hidden',data.role!=='admin');
   const approved=data.approved_examples||0;
   $('training-count').textContent=`${approved} approved example${approved===1?'':'s'}`;
-  if(data.role==='admin') loadTrainingQueue().catch(error=>showMessage(error.message,true));
+  if(data.role==='admin') {
+    loadTrainingQueue().catch(error=>showMessage(error.message,true));
+    loadSalesMembers().catch(error=>{$('sales-members').textContent=`Could not load sales members: ${error.message}`;});
+  }
   return data;
 }
 
@@ -246,8 +249,17 @@ $('refresh-training').addEventListener('click',()=>loadTrainingQueue().catch(err
 $('dismiss-credential').addEventListener('click',()=>{
   $('sales-credential-password').value='';$('sales-credential').classList.add('hidden');
 });
-async function manageSalesLogin(action){
-  const email=$('invite-email').value.trim().toLowerCase();
+async function loadSalesMembers(){
+  const {members}=await api('list-sales-members');
+  state.salesMembers=members;
+  $('sales-members').classList.toggle('muted',!members.length);
+  $('sales-members').innerHTML=members.length?members.map(member=>{
+    const created=member.created_at?new Date(member.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'—';
+    return `<div class="sales-row"><div class="sales-details"><strong>${escapeHtml(member.email)}</strong><span>Created ${escapeHtml(created)} · Password private</span></div><button class="secondary-button" type="button" data-sales-id="${escapeHtml(member.id)}">Reset password</button></div>`;
+  }).join(''):'No sales members created yet.';
+}
+async function manageSalesLogin(action,emailOverride=null){
+  const email=(emailOverride??$('invite-email').value).trim().toLowerCase();
   if(!email){showMessage('Enter the sales teammate email first.',true);return;}
   if(action==='reset-sales-password'&&!confirm(`Reset the password for ${email}? Their old password will stop working.`))return;
   const button=$(action==='create-sales-login'?'create-sales-button':'reset-sales-button');button.disabled=true;
@@ -259,10 +271,17 @@ async function manageSalesLogin(action){
     $('sales-credential').classList.remove('hidden');
     $('sales-credential').scrollIntoView({behavior:'smooth',block:'nearest'});
     $('invite-email').value='';
+    loadSalesMembers().catch(error=>{$('sales-members').textContent=`Could not load sales members: ${error.message}`;});
   }catch(error){showMessage(error.message,true);}finally{button.disabled=false;}
 }
 $('create-sales-button').addEventListener('click',()=>manageSalesLogin('create-sales-login'));
 $('reset-sales-button').addEventListener('click',()=>manageSalesLogin('reset-sales-password'));
+$('refresh-sales').addEventListener('click',()=>loadSalesMembers().catch(error=>{$('sales-members').textContent=`Could not load sales members: ${error.message}`;}));
+$('sales-members').addEventListener('click',event=>{
+  const button=event.target.closest('[data-sales-id]');
+  const member=state.salesMembers.find(item=>item.id===button?.dataset.salesId);
+  if(member) manageSalesLogin('reset-sales-password',member.email);
+});
 $('change-password-button').addEventListener('click',async()=>{
   const first=$('new-password').value,second=$('confirm-password').value;
   const message=$('password-message');message.textContent='';
