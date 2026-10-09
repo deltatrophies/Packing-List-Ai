@@ -51,7 +51,7 @@ create table if not exists public.gemini_credentials (
   owner_key text primary key,
   encrypted_key text not null,
   updated_by uuid not null references public.profiles(id),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now();
 );
 
 alter table public.profiles enable row level security;
@@ -91,6 +91,7 @@ using (owner_id = (select auth.uid()) or public.is_admin());
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('packing-sources', 'packing-sources', false, 18874368, array['image/jpeg', 'image/png', 'image/webp'])
 on conflict (id) do nothing;
+
 
 create policy "upload own source pages" on storage.objects for insert to authenticated
 with check (bucket_id = 'packing-sources' and (storage.foldername(name))[1] = (select auth.uid())::text);
