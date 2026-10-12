@@ -262,9 +262,15 @@ Deno.serve(async request => {
       if (actor.role !== 'admin') return fail('Admin access required', 403);
       const email = String(body.email || '').trim().toLowerCase();
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return fail('Enter a valid sales email');
-      const random = new Uint8Array(24);
-      crypto.getRandomValues(random);
-      const password = btoa(String.fromCharCode(...random)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+      if (body.password !== undefined && typeof body.password !== 'string') return fail('Invalid password');
+      const chosenPassword = typeof body.password === 'string' ? body.password : '';
+      if (chosenPassword && chosenPassword.length < 6) return fail('Password must have at least 6 characters');
+      let password = chosenPassword;
+      if (!password) {
+        const random = new Uint8Array(24);
+        crypto.getRandomValues(random);
+        password = btoa(String.fromCharCode(...random)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+      }
       if (action === 'create-sales-login') {
         const { data: created, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
         if (error || !created.user) return fail(error?.message || 'Could not create sales login', 400);
@@ -275,7 +281,7 @@ Deno.serve(async request => {
         const { error } = await admin.auth.admin.updateUserById(profile.id, { password });
         if (error) return fail(error.message, 400);
       }
-      return reply({ email, password });
+      return new Response(JSON.stringify({ email, password }), { status: 200, headers: { ...CORS, 'Cache-Control': 'no-store' } });
     }
     return fail('Unknown action', 404);
   } catch (error) { return fail(String(error instanceof Error ? error.message : error), 400); }

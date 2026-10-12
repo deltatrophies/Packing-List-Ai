@@ -15,6 +15,7 @@
 @media(max-width:700px){.admin-invite{flex-direction:column}.topbar .top-actions{flex-wrap:wrap;justify-content:flex-end}}
 .history-panel,#admin-section{padding:22px 25px;margin:16px 0 28px}
 .list-history{display:grid;gap:8px;margin-top:16px}
+.history-more{display:block;margin:14px auto 0;min-width:150px}
 .history-row{display:flex;align-items:center;gap:14px;text-align:left;width:100%;padding:12px 15px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink)}
 .history-row:hover{border-color:var(--blue);background:#f8fbff}
 .history-row strong{min-width:160px}.history-row span:nth-child(2){flex:1;color:var(--muted)}.history-row span:last-child{color:var(--blue);font-weight:bold}
@@ -26,6 +27,7 @@
 .credential-result input{width:100%;padding:10px;border:1px solid var(--line);border-radius:7px;background:white;font:inherit}
 .settings-dialog h3{font-size:15px;margin:14px 0 4px}.settings-dialog hr{border:0;border-top:1px solid var(--line);margin:21px 0}
 .admin-invite{flex-wrap:wrap}.admin-invite input{min-width:220px}
+.admin-invite{display:block}.admin-login-fields{display:flex;gap:12px;flex-wrap:wrap}.admin-login-fields label{display:grid;gap:6px;flex:1;min-width:220px;color:#52617a;font-size:12px;font-weight:bold}.admin-invite .admin-login-fields input{max-width:none;min-width:0}.admin-invite p{margin:9px 0 12px;color:var(--muted);font-size:12px}.admin-login-actions{display:flex;gap:10px;flex-wrap:wrap}
 .sales-head{margin:20px 0 12px}.sales-head h3{margin:0 0 4px;font-size:17px}.sales-head .secondary-button{flex:none}
 .sales-members{display:grid;gap:8px;margin-bottom:28px}.sales-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 14px;border:1px solid var(--line);border-radius:9px;background:#fff}
 .sales-details{display:grid;gap:3px;min-width:0}.sales-details strong{overflow-wrap:anywhere}.sales-details span{color:var(--muted);font-size:12px}

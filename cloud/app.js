@@ -2,7 +2,8 @@ import { api, configured, preparePages, uploadPages, combinePages, supabase } fr
 import { makeExcel, makePdf, parseFinishedWorkbook, validateList } from './exports.js';
 
 const $ = (id) => document.getElementById(id);
-const state = { files: [], imageUrls: [], uploads: [], data: null, currentPage: 0, listId: null, finalized: false, origin: 'recognition', editCount: 0, role: 'sales', salesMembers: [] };
+const state = { files: [], imageUrls: [], uploads: [], data: null, currentPage: 0, listId: null, finalized: false, origin: 'recognition', editCount: 0, role: 'sales', salesMembers: [], history: [], historyHasMore: false };
+let historyLoading = false;
 
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function showMessage(message, error=false) { const el=$('review-section').classList.contains('hidden')?$('global-message'):$('message'); el.textContent=message; el.classList.remove('hidden'); el.classList.toggle('error',error); el.scrollIntoView({behavior:'smooth',block:'nearest'}); }
@@ -212,13 +213,26 @@ async function saveKey(scope){
   try{await api('set-key',{scope,key});$('api-key').value='';await loadStatus();$('settings-dialog').close();showMessage(`${scope==='shared'?'Company shared':'Personal'} Gemini key updated.`);}
   catch(error){$('settings-error').textContent=error.message;}
 }
-async function loadHistory(){
-  const {data,error}=await supabase.from('packing_lists').select('id,data,status,source_paths,source_hashes,origin,created_at').order('created_at',{ascending:false}).limit(40);
-  if(error)throw error;
-  state.history=data||[];
+function renderHistory(){
   $('list-history').innerHTML=state.history.length?state.history.map(list=>`<button class="history-row" type="button" data-list="${list.id}"><strong>${escapeHtml(list.data.customer||'Untitled')}</strong><span>${escapeHtml(list.data.boxes.length)} boxes · ${escapeHtml(new Date(list.created_at).toLocaleDateString())} · ${list.origin==='manual_import'&&list.status==='training_approved'?'verified example':'saved list'}</span><span>Open →</span></button>`).join(''):'No saved lists yet.';
+  $('show-more-history').classList.toggle('hidden',!state.historyHasMore);
+}
+async function loadHistory(reset=true){
+  if(historyLoading)return;
+  historyLoading=true;
+  const count=reset?3:5,offset=reset?0:state.history.length;
+  $('refresh-history').disabled=true;$('show-more-history').disabled=true;
+  try{
+    const {data,error}=await supabase.from('packing_lists').select('id,data,status,source_paths,source_hashes,origin,created_at').order('created_at',{ascending:false}).order('id',{ascending:false}).range(offset,offset+count);
+    if(error)throw error;
+    const rows=data||[];
+    state.history=reset?rows.slice(0,count):[...state.history,...rows.slice(0,count)];
+    state.historyHasMore=rows.length>count;
+    renderHistory();
+  }finally{historyLoading=false;$('refresh-history').disabled=false;$('show-more-history').disabled=false;}
 }
 $('refresh-history').addEventListener('click',()=>loadHistory().catch(error=>showMessage(error.message,true)));
+$('show-more-history').addEventListener('click',()=>loadHistory(false).catch(error=>showMessage(error.message,true)));
 $('list-history').addEventListener('click',async e=>{
   const button=e.target.closest('[data-list]');if(!button)return;
   const list=state.history?.find(x=>x.id===button.dataset.list);if(!list)return;
@@ -249,16 +263,24 @@ async function loadSalesMembers(){
 async function manageSalesLogin(action,emailOverride=null){
   const email=(emailOverride??$('invite-email').value).trim().toLowerCase();
   if(!email){showMessage('Enter the sales teammate email first.',true);return;}
+  const chosenPassword=$('sales-password').value,confirmation=$('sales-password-confirm').value;
+  if(chosenPassword||confirmation){
+    if(chosenPassword!==confirmation){showMessage('Sales password and confirmation do not match.',true);return;}
+    if(chosenPassword.length<6){showMessage('Use at least 6 characters for the sales password.',true);return;}
+  }
   if(action==='reset-sales-password'&&!confirm(`Reset the password for ${email}? Their old password will stop working.`))return;
   const button=$(action==='create-sales-login'?'create-sales-button':'reset-sales-button');button.disabled=true;
   try{
-    const result=await api(action,{email});
+    const result=await api(action,{email,...(chosenPassword?{password:chosenPassword}:{})});
     $('sales-credential-title').textContent=action==='create-sales-login'?'Sales login created':'Sales password reset';
+    $('sales-credential-password-label').textContent=chosenPassword?'Chosen password':'Generated temporary password';
+    $('sales-credential-help').textContent=chosenPassword?'Give this password to the sales person privately. It cannot be viewed again later.':'Give this temporary password to the sales person privately. Ask them to change it in Settings after signing in.';
     $('sales-credential-email').value=result.email;
     $('sales-credential-password').value=result.password;
     $('sales-credential').classList.remove('hidden');
     $('sales-credential').scrollIntoView({behavior:'smooth',block:'nearest'});
     $('invite-email').value='';
+    $('sales-password').value='';$('sales-password-confirm').value='';
     loadSalesMembers().catch(error=>{$('sales-members').textContent=`Could not load sales members: ${error.message}`;});
   }catch(error){showMessage(error.message,true);}finally{button.disabled=false;}
 }
@@ -273,7 +295,7 @@ $('sales-members').addEventListener('click',event=>{
 $('change-password-button').addEventListener('click',async()=>{
   const first=$('new-password').value,second=$('confirm-password').value;
   const message=$('password-message');message.textContent='';
-  if(first.length<12||first!==second){message.textContent='Enter matching passwords with at least 12 characters.';return;}
+  if(first.length<6||first!==second){message.textContent='Enter matching passwords with at least 6 characters.';return;}
   const button=$('change-password-button');button.disabled=true;
   try{
     const {error}=await supabase.auth.updateUser({password:first});if(error)throw error;
