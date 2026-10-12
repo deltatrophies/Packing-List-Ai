@@ -53,8 +53,25 @@ test('a long box remains on one Excel print page', async () => {
   const book = new ExcelJS.Workbook();
   await book.xlsx.load(await (await makeExcel(longList)).arrayBuffer());
   assert.equal(book.worksheets.length, 1);
+  assert.equal(book.worksheets[0].pageSetup.paperSize, 9);
   assert.equal(book.worksheets[0].pageSetup.fitToHeight, 1);
   assert.equal(book.worksheets[0].getCell('B42').value, '  PC-35 M');
+});
+
+test('18-entry box pair exports on A4 in Excel and PDF', async () => {
+  const eighteen = { ...list, boxes: [
+    { number: 5, items: Array.from({ length: 18 }, (_, i) => ({ code: `PC-${i + 1}`, size: 'M', quantity: 2 })) },
+    { number: 6, items: list.boxes[0].items },
+  ] };
+  const book = new ExcelJS.Workbook();
+  await book.xlsx.load(await (await makeExcel(eighteen)).arrayBuffer());
+  assert.equal(book.worksheets.length, 1);
+  assert.equal(book.worksheets[0].pageSetup.paperSize, 9);
+  assert.equal(book.worksheets[0].pageSetup.scale, 100);
+  assert.equal(book.worksheets[0].getCell('B25').value, '  PC-18 M');
+  const pdf = new TextDecoder().decode(await makePdf(eighteen).arrayBuffer());
+  assert.match(pdf, /\/MediaBox \[0 0 841\.8\d* 595\.2\d*/);
+  assert.doesNotMatch(pdf, /\/MediaBox \[0 0 1190/);
 });
 
 test('PDF export produces a nonempty document', async () => {

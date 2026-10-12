@@ -8,8 +8,12 @@ const MARK_PT = 30.75;
 const TABLE_HEADER_PT = 33;
 const GROUP_GAP_PT = 15;
 const GROUP_PT = BOX_TITLE_PT + MARK_PT + TABLE_HEADER_PT;
-const A4_GROUP_BUDGET_PT = 500;
-const A4_LARGE_PRINT_PT = 455;
+const A4_WIDTH_PT = 841.89;
+const A4_HEIGHT_PT = 595.28;
+const PDF_MARGIN_PT = 25;
+const A4_PRINT_HEIGHT_PT = A4_HEIGHT_PT - 2 * PDF_MARGIN_PT;
+const A4_GROUP_BUDGET_PT = A4_PRINT_HEIGHT_PT + GROUP_GAP_PT;
+const A4_LARGE_PRINT_PT = GROUP_GAP_PT + A4_PRINT_HEIGHT_PT / 1.25;
 const visibleRows = box => Math.max(MIN_ROWS_PER_BOX, box.items.length);
 const groupHeight = pair => GROUP_PT + ROW_PT * Math.max(...pair.map(visibleRows)) + GROUP_GAP_PT;
 
@@ -129,9 +133,9 @@ export async function makeExcel(data) {
       nextRow += 3 + rows + 1;
     }
     const pageHeight = groups.reduce((n, pair) => n + groupHeight(pair), 0);
-    const oversized = pageHeight - GROUP_GAP_PT > 790;
+    const oversized = pageHeight - GROUP_GAP_PT > A4_PRINT_HEIGHT_PT;
     sheet.pageSetup = {
-      orientation: 'landscape', paperSize: pageHeight > A4_GROUP_BUDGET_PT ? 8 : 9,
+      orientation: 'landscape', paperSize: 9,
       fitToPage: oversized,
       ...(oversized ? { fitToWidth: 1, fitToHeight: 1 } : { scale: pageHeight <= A4_LARGE_PRINT_PT ? 125 : 100 }),
       margins: { left: .236, right: .236, top: .315, bottom: .315, header: 0, footer: 0 },
@@ -165,7 +169,7 @@ function pdfBox(doc, box, x, top, width, rows, mark, scale) {
   for (const y of [top, titleBottom, markBottom, headerBottom, ...Array.from({ length: rows }, (_, i) => headerBottom + (i + 1) * ROW_PT * scale)]) doc.line(x, y, x + width, y);
   for (const xpos of [x, qtyLeft, x + width]) doc.line(xpos, top, xpos, tableBottom);
   doc.line(x + numberW, markBottom, x + numberW, tableBottom);
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(28);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(Math.min(28, 28 * scale));
   doc.text('BOX No.', x + (width - qtyW) / 2, top + 27 * scale, { align: 'center' });
   doc.setFontSize(28 * scale);
   doc.text(String(box.number), qtyLeft + qtyW / 2, top + 27 * scale, { align: 'center' });
@@ -193,14 +197,14 @@ export function makePdf(data) {
   validateList(data);
   const pages = planPages(data.boxes);
   let doc;
-  pages.forEach((groups, pageIndex) => {
+  pages.forEach(groups => {
     const heightNeeded = groups.reduce((n, pair) => n + groupHeight(pair), 0);
-    const format = heightNeeded <= A4_GROUP_BUDGET_PT ? [841.89, 595.28] : [1190.55, Math.max(841.89, heightNeeded + 70)];
+    const format = [A4_WIDTH_PT, A4_HEIGHT_PT];
     if (!doc) doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format, compress: true });
     else doc.addPage(format, 'landscape');
-    const [pageWidth] = format, margin = 25;
+    const pageWidth = A4_WIDTH_PT, margin = PDF_MARGIN_PT;
     const gap = 15, boxWidth = (pageWidth - 2 * margin - gap) / 2;
-    const scale = heightNeeded <= A4_LARGE_PRINT_PT ? 1.25 : 1;
+    const scale = heightNeeded <= A4_LARGE_PRINT_PT ? 1.25 : Math.min(1, A4_PRINT_HEIGHT_PT / (heightNeeded - GROUP_GAP_PT));
     let top = 25;
     for (const pair of groups) {
       const rows = Math.max(...pair.map(visibleRows));
