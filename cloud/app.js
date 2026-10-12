@@ -2,7 +2,7 @@ import { api, configured, preparePages, uploadPages, combinePages, supabase } fr
 import { makeExcel, makePdf, parseFinishedWorkbook, validateList } from './exports.js';
 
 const $ = (id) => document.getElementById(id);
-const state = { files: [], imageUrls: [], uploads: [], data: null, currentPage: 0, listId: null, finalized: false, origin: 'recognition', editCount: 0, role: 'sales', salesMembers: [], history: [], historyHasMore: false };
+const state = { files: [], imageUrls: [], uploads: [], data: null, currentPage: 0, listId: null, finalized: false, origin: 'recognition', editCount: 0, role: 'sales', keyMode: 'shared', salesMembers: [], history: [], historyHasMore: false };
 let historyLoading = false;
 
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -12,6 +12,7 @@ function clearMessage() { $('message').classList.add('hidden');$('global-message
 async function loadStatus() {
   const data=await api('status');
   state.role=data.role;
+  state.keyMode=data.key_mode;
   const connected=data.key_mode==='personal'?data.has_personal_key:data.has_shared_key;
   $('key-status').textContent=connected ? `Gemini connected · ${data.key_mode}` : `${data.key_mode} API key needed`;
   $('key-status').classList.toggle('off',!connected);
@@ -196,7 +197,13 @@ $('final-button').addEventListener('click',finalizeList);
 $('settings-button').addEventListener('click',()=>$('settings-dialog').showModal());
 $('save-key').addEventListener('click',()=>saveKey('personal'));
 $('save-shared-key').addEventListener('click',()=>saveKey('shared'));
-$('key-mode').addEventListener('change',async e=>{try{await api('set-key-mode',{mode:e.target.value});await loadStatus();}catch(error){$('settings-error').textContent=error.message;}});
+$('key-mode').addEventListener('change',async e=>{
+  const select=e.target,mode=select.value;
+  select.disabled=true;$('settings-error').textContent='';
+  try{await api('set-key-mode',{mode});await loadStatus();}
+  catch(error){select.value=state.keyMode;$('settings-error').textContent=error.message;}
+  finally{select.disabled=false;}
+});
 $('page-tabs').addEventListener('click',e=>{const button=e.target.closest('[data-page]');if(button)setPage(Number(button.dataset.page));});
 $('source-view').addEventListener('click',()=>{$('source-view').classList.toggle('zoomed');});
 function markEdited(){setFinalized(false);state.editCount++;}
@@ -210,7 +217,7 @@ $('download-pdf').addEventListener('click',()=>exportFile('pdf'));
 
 async function saveKey(scope){
   const key=$('api-key').value.trim();$('settings-error').textContent='';
-  try{await api('set-key',{scope,key});$('api-key').value='';await loadStatus();$('settings-dialog').close();showMessage(`${scope==='shared'?'Company shared':'Personal'} Gemini key updated.`);}
+  try{await api('set-key',{scope,key});$('api-key').value='';await loadStatus();$('settings-dialog').close();showMessage(scope==='shared'?'Company Gemini key updated for everyone using the shared key.':'Personal Gemini key saved and selected for your account.');}
   catch(error){$('settings-error').textContent=error.message;}
 }
 function renderHistory(){

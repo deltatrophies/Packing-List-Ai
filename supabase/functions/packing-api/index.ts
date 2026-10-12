@@ -234,10 +234,15 @@ Deno.serve(async request => {
       const ownerKey = scope === 'shared' ? 'shared' : actor.id;
       const { error } = await admin.from('gemini_credentials').upsert({ owner_key: ownerKey, encrypted_key: await encryptKey(key), updated_by: actor.id, updated_at: new Date().toISOString() });
       if (error) return fail('Could not save key', 500);
-      return reply({ saved: true, scope });
+      if (scope === 'personal') {
+        const { error: modeError } = await admin.from('profiles').update({ key_mode: 'personal' }).eq('id', actor.id);
+        if (modeError) return fail('Key saved, but could not select it. Choose My personal key in Settings.', 500);
+      }
+      return reply({ saved: true, scope, key_mode: scope === 'personal' ? 'personal' : actor.key_mode });
     }
     if (action === 'set-key-mode') {
       if (!['shared', 'personal'].includes(String(body.mode))) return fail('Invalid key mode');
+      if (body.mode === 'personal' && !(await hasCredential(actor.id))) return fail('Add your personal Gemini key before selecting it');
       const { error } = await admin.from('profiles').update({ key_mode: body.mode }).eq('id', actor.id);
       if (error) return fail('Could not change key mode', 500);
       return reply({ key_mode: body.mode });
