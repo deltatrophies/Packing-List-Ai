@@ -3,9 +3,13 @@ import { jsPDF } from 'jspdf';
 
 export const MIN_ROWS_PER_BOX = 5;
 const ROW_PT = 22;
-const GROUP_PT = 74;
-const GROUP_GAP_PT = 16;
-const A4_GROUP_BUDGET_PT = 440;
+const BOX_TITLE_PT = 36;
+const MARK_PT = 30.75;
+const TABLE_HEADER_PT = 33;
+const GROUP_GAP_PT = 15;
+const GROUP_PT = BOX_TITLE_PT + MARK_PT + TABLE_HEADER_PT;
+const A4_GROUP_BUDGET_PT = 500;
+const A4_LARGE_PRINT_PT = 455;
 const visibleRows = box => Math.max(MIN_ROWS_PER_BOX, box.items.length);
 const groupHeight = pair => GROUP_PT + ROW_PT * Math.max(...pair.map(visibleRows)) + GROUP_GAP_PT;
 
@@ -48,35 +52,54 @@ function setCell(sheet, address, value, bold = false) {
   return cell;
 }
 function sheetBox(sheet, box, startColumn, topRow, rows, mark) {
-  if (box) {
-    setCell(sheet, [topRow, startColumn + 1], 'BOX No.', true);
-    setCell(sheet, [topRow, startColumn + 2], box.number, true);
-    setCell(sheet, [topRow + 1, startColumn + 1], 'PVT. MARK');
-    setCell(sheet, [topRow + 1, startColumn + 2], mark);
+  if (!box) return;
+  const left = sheet.getColumn(startColumn).letter;
+  const middle = sheet.getColumn(startColumn + 1).letter;
+  sheet.mergeCells(`${left}${topRow}:${middle}${topRow}`);
+  sheet.mergeCells(`${left}${topRow + 1}:${middle}${topRow + 1}`);
+  for (const [row, label, number, fontSize] of [
+    [topRow, 'BOX No.', box.number, 28],
+    [topRow + 1, 'PVT. MARK', mark, 14],
+  ]) {
+    for (const [column, value] of [[startColumn, label], [startColumn + 2, number]]) {
+      const cell = sheet.getCell(row, column);
+      cell.value = value;
+      cell.font = { name: 'Arial', size: fontSize, bold: true };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = thinBorder();
+    }
   }
   for (const [offset, label] of ['S. No.', 'ITEM CODE', 'QTY.'].entries()) {
     const cell = sheet.getCell(topRow + 2, startColumn + offset);
     cell.value = label; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE9EDF2' } };
-    cell.font = { name: 'Arial', size: 10, bold: true };
+    cell.font = { name: 'Arial', size: 14, bold: true };
     cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.border = thinBorder();
   }
   for (let i = 0; i < rows; i++) {
-    const row = topRow + 3 + i, item = box?.items[i];
-    if (box) sheet.getCell(row, startColumn).value = i + 1;
+    const row = topRow + 3 + i, item = box.items[i];
+    sheet.getCell(row, startColumn).value = i + 1;
     if (item) {
-      sheet.getCell(row, startColumn + 1).value = itemLabel(item);
+      sheet.getCell(row, startColumn + 1).value = `  ${itemLabel(item)}`;
       const qty = sheet.getCell(row, startColumn + 2);
       qty.value = item.quantity; qty.numFmt = '0" PCS"';
     }
     for (let j = 0; j < 3; j++) {
       const cell = sheet.getCell(row, startColumn + j);
-      cell.font = { name: 'Arial', size: 10 };
+      cell.font = { name: 'Arial', size: 12 };
       cell.alignment = { vertical: 'middle', horizontal: j === 1 ? 'left' : 'center' };
-      cell.border = { bottom: { style: 'thin', color: { argb: 'FFAAB4C0' } } };
+      cell.border = thinBorder();
     }
     sheet.getRow(row).height = ROW_PT;
   }
-  for (const row of [topRow, topRow + 1, topRow + 2]) sheet.getRow(row).height = 23;
+  sheet.getRow(topRow).height = BOX_TITLE_PT;
+  sheet.getRow(topRow + 1).height = MARK_PT;
+  sheet.getRow(topRow + 2).height = TABLE_HEADER_PT;
+}
+
+function thinBorder() {
+  const edge = { style: 'thin', color: { argb: 'FF000000' } };
+  return { top: edge, bottom: edge, left: edge, right: edge };
 }
 
 export async function makeExcel(data) {
@@ -85,7 +108,7 @@ export async function makeExcel(data) {
   for (const [pageIndex, groups] of planPages(data.boxes).entries()) {
     const sheet = book.addWorksheet(`Page ${String(pageIndex + 1).padStart(2, '0')}`);
     sheet.views = [{ showGridLines: false }];
-    for (const [col, width] of Object.entries({ A: 7, B: 34, C: 11, D: 3, E: 7, F: 34, G: 11 })) sheet.getColumn(col).width = width;
+    for (const [col, width] of Object.entries({ A: 9.43, B: 34, C: 11, D: 3, E: 9.71, F: 34, G: 11 })) sheet.getColumn(col).width = width;
     sheet.mergeCells('A1:G1');
     const title = setCell(sheet, 'A1', 'PACKING LIST', true);
     title.font = { name: 'Arial', size: 16, bold: true };
@@ -95,21 +118,26 @@ export async function makeExcel(data) {
     setCell(sheet, 'E2', 'DATE:', true); setCell(sheet, 'F2', data.packing_date);
     setCell(sheet, 'A3', 'TOTAL BOXES:', true); setCell(sheet, 'B3', data.boxes.length);
     setCell(sheet, 'E3', 'TRANSPORT:', true); setCell(sheet, 'F3', data.transport);
+    sheet.getCell('A3').alignment = { vertical: 'middle', wrapText: true };
+    sheet.getCell('E3').alignment = { vertical: 'middle', wrapText: true };
     sheet.getRow(2).height = sheet.getRow(3).height = 23;
     let nextRow = 5;
     for (const pair of groups) {
       const rows = Math.max(...pair.map(visibleRows));
       sheetBox(sheet, pair[0], 1, nextRow, rows, data.private_mark);
       sheetBox(sheet, pair[1] || null, 5, nextRow, rows, data.private_mark);
-      nextRow += 3 + rows + 2;
+      nextRow += 3 + rows + 1;
     }
+    const pageHeight = groups.reduce((n, pair) => n + groupHeight(pair), 0);
+    const oversized = pageHeight - GROUP_GAP_PT > 790;
     sheet.pageSetup = {
-      orientation: 'landscape', paperSize: groups.reduce((n, pair) => n + groupHeight(pair), 0) > A4_GROUP_BUDGET_PT ? 8 : 9,
-      fitToPage: true, fitToWidth: 1, fitToHeight: 1,
-      margins: { left: .25, right: .25, top: .3, bottom: .3, header: 0, footer: 0 },
+      orientation: 'landscape', paperSize: pageHeight > A4_GROUP_BUDGET_PT ? 8 : 9,
+      fitToPage: oversized,
+      ...(oversized ? { fitToWidth: 1, fitToHeight: 1 } : { scale: pageHeight <= A4_LARGE_PRINT_PT ? 125 : 100 }),
+      margins: { left: .236, right: .236, top: .315, bottom: .315, header: 0, footer: 0 },
       horizontalCentered: true,
     };
-    sheet.pageSetup.printArea = `A1:G${nextRow - 2}`;
+    sheet.pageSetup.printArea = `A5:G${nextRow - 2}`;
   }
   return new Blob([await book.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
@@ -124,31 +152,40 @@ function fitText(doc, text, maxWidth, start = 9.2) {
   }
   return output;
 }
-function pdfBox(doc, box, x, top, width, rows, mark) {
+function pdfBox(doc, box, x, top, width, rows, mark, scale) {
   if (!box) return;
-  doc.setDrawColor(135, 148, 164); doc.setLineWidth(.6);
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
-  doc.text('BOX No.', x + 7, top + 14); doc.text(String(box.number), x + width - 7, top + 14, { align: 'right' });
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
-  doc.text('PVT. MARK', x + 7, top + 35); doc.text(fitText(doc, mark, width - 97, 9), x + 90, top + 35);
-  const headerTop = top + 48, headerBottom = headerTop + 21, tableBottom = headerBottom + ROW_PT * rows;
-  doc.setFillColor(233, 237, 242); doc.rect(x, headerTop, width, 21, 'F');
-  const numberW = 43, qtyW = 76;
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
-  doc.text('S. No.', x + numberW / 2, headerBottom - 6, { align: 'center' });
-  doc.text('ITEM CODE', x + numberW + 8, headerBottom - 6);
-  doc.text('QTY.', x + width - qtyW / 2, headerBottom - 6, { align: 'center' });
-  for (const xpos of [x, x + numberW, x + width - qtyW, x + width]) doc.line(xpos, headerTop, xpos, tableBottom);
-  doc.line(x, headerTop, x + width, headerTop);
-  for (let i = 0; i <= rows; i++) doc.line(x, headerBottom + i * ROW_PT, x + width, headerBottom + i * ROW_PT);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+  doc.setDrawColor(0); doc.setLineWidth(.5);
+  const numberW = width * 9.43 / 54.43, qtyW = width * 11 / 54.43;
+  const qtyLeft = x + width - qtyW;
+  const titleBottom = top + BOX_TITLE_PT * scale;
+  const markBottom = titleBottom + MARK_PT * scale;
+  const headerBottom = markBottom + TABLE_HEADER_PT * scale;
+  const tableBottom = headerBottom + ROW_PT * rows * scale;
+  doc.setFillColor(233, 237, 242); doc.rect(x, markBottom, width, TABLE_HEADER_PT * scale, 'F');
+  for (const y of [top, titleBottom, markBottom, headerBottom, ...Array.from({ length: rows }, (_, i) => headerBottom + (i + 1) * ROW_PT * scale)]) doc.line(x, y, x + width, y);
+  for (const xpos of [x, qtyLeft, x + width]) doc.line(xpos, top, xpos, tableBottom);
+  doc.line(x + numberW, markBottom, x + numberW, tableBottom);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(28);
+  doc.text('BOX No.', x + (width - qtyW) / 2, top + 27 * scale, { align: 'center' });
+  doc.setFontSize(28 * scale);
+  doc.text(String(box.number), qtyLeft + qtyW / 2, top + 27 * scale, { align: 'center' });
+  doc.setFontSize(14 * scale);
+  doc.text('PVT. MARK', x + (width - qtyW) / 2, titleBottom + 21 * scale, { align: 'center' });
+  doc.text(fitText(doc, mark, qtyW - 8, 14 * scale), qtyLeft + qtyW / 2, titleBottom + 21 * scale, { align: 'center' });
+  doc.setFontSize(14 * scale);
+  doc.text('S. No.', x + numberW / 2, markBottom + 22 * scale, { align: 'center' });
+  doc.text('ITEM CODE', x + numberW + (qtyLeft - x - numberW) / 2, markBottom + 22 * scale, { align: 'center' });
+  doc.text('QTY.', qtyLeft + qtyW / 2, markBottom + 22 * scale, { align: 'center' });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(12 * scale);
   for (let i = 0; i < rows; i++) {
-    const y = headerBottom + (i + 1) * ROW_PT - 7;
+    doc.setFontSize(12 * scale);
+    const y = headerBottom + ((i + 1) * ROW_PT - 6) * scale;
     doc.text(String(i + 1), x + numberW / 2, y, { align: 'center' });
     const item = box.items[i];
     if (item) {
-      doc.text(fitText(doc, itemLabel(item), width - numberW - qtyW - 14), x + numberW + 7, y);
-      if (item.quantity !== null) { doc.setFontSize(9); doc.text(`${item.quantity} PCS`, x + width - qtyW / 2, y, { align: 'center' }); }
+      doc.text(fitText(doc, itemLabel(item), width - numberW - qtyW - 14, 12 * scale), x + numberW + 7, y);
+      doc.setFontSize(12 * scale);
+      if (item.quantity !== null) doc.text(`${item.quantity} PCS`, qtyLeft + qtyW / 2, y, { align: 'center' });
     }
   }
 }
@@ -158,27 +195,19 @@ export function makePdf(data) {
   let doc;
   pages.forEach((groups, pageIndex) => {
     const heightNeeded = groups.reduce((n, pair) => n + groupHeight(pair), 0);
-    const format = heightNeeded <= A4_GROUP_BUDGET_PT ? [841.89, 595.28] : [1190.55, Math.max(841.89, heightNeeded + 120)];
+    const format = heightNeeded <= A4_GROUP_BUDGET_PT ? [841.89, 595.28] : [1190.55, Math.max(841.89, heightNeeded + 70)];
     if (!doc) doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format, compress: true });
     else doc.addPage(format, 'landscape');
-    const [pageWidth, pageHeight] = format, margin = 26;
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
-    doc.text('PACKING LIST', pageWidth / 2, 30, { align: 'center' });
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
-    doc.text(fitText(doc, `TO: ${data.customer}`, pageWidth * .55, 9.5), margin, 51);
-    doc.text(`DATE: ${data.packing_date}`, pageWidth - margin, 51, { align: 'right' });
-    doc.text(`TOTAL BOXES: ${data.boxes.length}`, margin, 67);
-    doc.text(`TRANSPORT: ${data.transport}`, pageWidth - margin, 67, { align: 'right' });
-    doc.setDrawColor(184, 193, 204); doc.line(margin, 76, pageWidth - margin, 76);
+    const [pageWidth] = format, margin = 25;
     const gap = 15, boxWidth = (pageWidth - 2 * margin - gap) / 2;
-    let top = 89;
+    const scale = heightNeeded <= A4_LARGE_PRINT_PT ? 1.25 : 1;
+    let top = 25;
     for (const pair of groups) {
       const rows = Math.max(...pair.map(visibleRows));
-      pdfBox(doc, pair[0], margin, top, boxWidth, rows, data.private_mark);
-      pdfBox(doc, pair[1] || null, margin + boxWidth + gap, top, boxWidth, rows, data.private_mark);
-      top += groupHeight(pair);
+      pdfBox(doc, pair[0], margin, top, boxWidth, rows, data.private_mark, scale);
+      pdfBox(doc, pair[1] || null, margin + boxWidth + gap, top, boxWidth, rows, data.private_mark, scale);
+      top += groupHeight(pair) * scale;
     }
-    doc.setFontSize(8); doc.text(`Page ${pageIndex + 1} of ${pages.length}`, pageWidth - margin, pageHeight - 14, { align: 'right' });
   });
   return doc.output('blob');
 }
@@ -203,24 +232,27 @@ export async function parseFinishedWorkbook(file) {
   for (const sheet of sheets) {
     const headings = [];
     sheet.eachRow((row, rowNo) => row.eachCell((cell, col) => {
+      if (cell.isMerged && cell.master !== cell) return;
       if (String(value(cell)).trim().toUpperCase().replace(/\s/g, '').startsWith('BOXNO')) {
-        const number = Number(value(sheet.getCell(rowNo, col + 1)));
-        if (Number.isInteger(number) && number > 0) headings.push({ row: rowNo, col, number });
+        const adjacent = Number(value(sheet.getCell(rowNo, col + 1)));
+        const merged = Number(value(sheet.getCell(rowNo, col + 2)));
+        const number = Number.isInteger(adjacent) && adjacent > 0 ? adjacent : merged;
+        if (Number.isInteger(number) && number > 0) headings.push({ row: rowNo, col, itemCol: number === adjacent ? col : col + 1, number });
       }
     }));
     for (const h of headings) {
-      const next = headings.filter(x => x.col === h.col && x.row > h.row).map(x => x.row);
+      const next = headings.filter(x => x.itemCol === h.itemCol && x.row > h.row).map(x => x.row);
       const end = Math.min(...next, sheet.rowCount + 1);
       let header = null;
       for (let row = h.row + 1; row < Math.min(h.row + 9, end); row++) {
-        if (String(value(sheet.getCell(row, h.col))).trim().toUpperCase() === 'ITEM CODE') { header = row; break; }
+        if (String(value(sheet.getCell(row, h.itemCol))).trim().toUpperCase() === 'ITEM CODE') { header = row; break; }
       }
       if (!header) continue;
-      if (!privateMark) privateMark = String(value(sheet.getCell(h.row + 2, h.col + 1))).trim();
+      if (!privateMark) privateMark = String(value(sheet.getCell(h.row + 1, h.itemCol + 1))).trim();
       const items = [];
       for (let row = header + 1; row < end; row++) {
-        const label = value(sheet.getCell(row, h.col));
-        const quantity = String(value(sheet.getCell(row, h.col + 1))).match(/\d+/)?.[0];
+        const label = value(sheet.getCell(row, h.itemCol));
+        const quantity = String(value(sheet.getCell(row, h.itemCol + 1))).match(/\d+/)?.[0];
         if (!label || !quantity) continue;
         items.push({ ...splitLabel(label), quantity: Number(quantity), needs_review: false, source_text: '' });
       }

@@ -23,13 +23,38 @@ test('Excel prints five rows per short box and imports its actual entries', asyn
   const blob = await makeExcel(list);
   const book = new ExcelJS.Workbook();
   await book.xlsx.load(await blob.arrayBuffer());
-  assert.equal(book.worksheets[0].getCell('B5').value, 'BOX No.');
-  assert.equal(book.worksheets[0].getCell('B8').value, 'PC-400 M');
-  assert.equal(book.worksheets[0].getCell('C12').value, null);
-  assert.equal(book.worksheets[0].pageSetup.fitToHeight, 1);
+  const sheet = book.worksheets[0];
+  assert.equal(sheet.getCell('A5').value, 'BOX No.');
+  assert.equal(sheet.getCell('C5').value, 1);
+  assert.equal(sheet.getCell('A5').font.size, 28);
+  assert.equal(sheet.getCell('A6').font.size, 14);
+  assert.equal(sheet.getCell('A7').font.size, 14);
+  assert.equal(sheet.getCell('B8').font.size, 12);
+  assert.equal(sheet.getCell('B8').value, '  PC-400 M');
+  assert.equal(sheet.getCell('C12').value, null);
+  assert.equal(sheet.getCell('A14').value, 'BOX No.');
+  assert.ok(sheet.getCell('B8').border.left);
+  assert.equal(sheet.pageSetup.printArea, 'A5:G21');
+  assert.equal(sheet.pageSetup.scale, 125);
   const imported = await parseFinishedWorkbook(new File([blob], 'Test Customer 08-10-2026.xlsx'));
   assert.equal(imported.boxes.length, 7);
   assert.equal(imported.boxes[0].items.length, 3);
+});
+
+test('an odd final box does not create a fictitious box', async () => {
+  const book = new ExcelJS.Workbook();
+  await book.xlsx.load(await (await makeExcel({ ...list, boxes: list.boxes.slice(0, 3) })).arrayBuffer());
+  assert.equal(book.worksheets[0].getCell('A14').value, 'BOX No.');
+  assert.equal(book.worksheets[0].getCell('E14').value, null);
+});
+
+test('a long box remains on one Excel print page', async () => {
+  const longList = { ...list, boxes: [{ number: 1, items: Array.from({ length: 35 }, (_, i) => ({ code: `PC-${i + 1}`, size: 'M', quantity: 1 })) }] };
+  const book = new ExcelJS.Workbook();
+  await book.xlsx.load(await (await makeExcel(longList)).arrayBuffer());
+  assert.equal(book.worksheets.length, 1);
+  assert.equal(book.worksheets[0].pageSetup.fitToHeight, 1);
+  assert.equal(book.worksheets[0].getCell('B42').value, '  PC-35 M');
 });
 
 test('PDF export produces a nonempty document', async () => {
